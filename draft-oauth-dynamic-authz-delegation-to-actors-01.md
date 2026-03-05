@@ -1,9 +1,9 @@
 ---
-title: "OAuth 2.0 Extension: Dynamic Authorization Delegation to Delegated Actors"
-abbrev: "OAuth 2.0 Dynamic Delegation to Delegated Actors"
+title: "OAuth 2.0 Extension: Dynamic On-Behalf-Of Authorization for Delegated Actors"
+abbrev: "OAuth 2.0 Dynamic On-Behalf-Of Delegation"
 category: info
 
-docname: draft-oauth-dynamic-authz-delegation-to-actors-01
+docname: draft-oauth-dynamic-on-behalf-of-delegation-01
 submissiontype: IETF
 number:
 date:
@@ -18,6 +18,7 @@ keyword:
  - actor
  - obo
  - autonomous-entity
+ - ai-agent
 venue:
   group: "Web Authorization Protocol"
   type: "Working Group"
@@ -35,32 +36,13 @@ author:
     organization: WSO2
     email: ayshsandu@gmail.com
 
-normative:
-  RFC2119:
-  RFC6749:
-  RFC7519:
-  RFC7636:
-  RFC8174:
-  RFC8693:
-  RFC9068:
-  RFC9126:
-
-informative:
-  RFC8628:
-  OpenID.CIBA:
-    title: "OpenID Connect Client-Initiated Backchannel Authentication Flow - Core 1.0"
-    target: https://openid.net/specs/openid-client-initiated-backchannel-authentication-core-1_0.html
-    date: 2021-09
-    author:
-      - org: OpenID Foundation
-
 --- abstract
 
 This specification extends the OAuth 2.0 Authorization Framework {{RFC6749}} to enable dynamic delegation of authority from a human user (the Granting User) to an autonomous software entity (the Delegated Actor) through an OAuth 2.0-mediated flow. A Delegated Actor is any software entity -- such as an AI agent, an automated script, a background service, or a robotic process -- that performs actions on behalf of a user at protected resources.
 
-The specification introduces the `requested_actor` parameter to identify the Delegated Actor for which delegation is requested, and the `actor_token` parameter to cryptographically authenticate the Delegated Actor during the token exchange. The resulting access token carries structured claims documenting the full delegation chain from the Granting User through the Client to the Delegated Actor. The specification supports Dynamic Consent, enabling the authorization flow to be triggered by a resource server challenge so that consent is obtained in real time when access is attempted.
+The specification introduces the `requested_actor` parameter to identify the Delegated Actor for which delegation is requested, and the `actor_token` parameter to cryptographically authenticate the Delegated Actor during a user consented delegation flow. The resulting access token carries structured claims documenting the full delegation chain from the Granting User through the Client to the Delegated Actor. The specification supports Dynamic Consent, enabling the authorization flow to be triggered by a resource server challenge so that consent is obtained in real time when access is attempted, and authorization delegation is just-in-time.
 
-Three authorization initiation modes are defined: Pushed Authorization Requests (PAR) {{RFC9126}} for interactive sessions with enhanced request integrity (RECOMMENDED), Client-Initiated Backchannel Authentication (CIBA) {{OpenID.CIBA}} for background or offline scenarios, and direct front-channel authorization as a baseline for low-complexity or legacy deployments.
+The specification uses Pushed Authorization Requests (PAR) {{RFC9126}} as the authorization initiation mechanism, providing request integrity and upfront actor validation through server-to-server parameter submission. Applicability to Client-Initiated Backchannel Authentication (CIBA) {{OpenID.CIBA}} for ambient use cases and to the standard OAuth 2.0 Authorization Code Grant {{RFC6749}} for low-complexity deployments is described in the appendices.
 
 --- middle
 
@@ -72,26 +54,23 @@ Standard OAuth 2.0 flows, such as the Authorization Code Grant and the Client Cr
 
 The OAuth 2.0 Token Exchange specification {{RFC8693}} provides a framework for exchanging tokens and introduces the `act` claim to represent delegation chains. However, it is primarily designed for server-to-server communication. It does not natively support obtaining explicit user consent for a Delegated Actor through a human-in-the-loop channel (such as the authorization endpoint or CIBA endpoint), nor does it define how to acquire the initial subject token. This specification builds upon the delegation semantics and the `act` claim of {{RFC8693}} while addressing these gaps.
 
-To address these limitations, this specification leverages the OAuth 2.0 Authorization Code Grant {{RFC6749}}, Pushed Authorization Requests (PAR) {{RFC9126}}, and Client-Initiated Backchannel Authentication (CIBA) {{OpenID.CIBA}} to enable dynamic, user-consented, and auditable authorization delegation to Delegated Actors. It introduces the following key enhancements:
+To address these limitations, this specification extends Pushed Authorization Requests (PAR) {{RFC9126}} to enable dynamic, user-consented, and auditable authorization delegation to Delegated Actors. It introduces the following key enhancements:
 
-1. The `requested_actor` parameter at the initiation endpoint, allowing the Client to specify the Delegated Actor for which delegation is requested.
+1. The `requested_actor` parameter at the PAR endpoint, allowing the Client to specify the Delegated Actor for which delegation is requested.
 
-2. The `actor_token` parameter at the token endpoint, enabling the Delegated Actor to cryptographically identify and authenticate itself when exchanging a user-approved authorization code for an access token.
+2. The `actor_token` parameter at both the PAR and token endpoints, enabling the Delegated Actor to cryptographically identify and authenticate itself during authorization initiation and when exchanging a user-approved authorization code for an access token.
 
-3. Three authorization initiation modes providing deployment flexibility:
-   * Pushed Authorization Requests (PAR) {{RFC9126}} (RECOMMENDED) for standard interactive sessions, providing request integrity and enabling upfront actor validation.
-   * Client-Initiated Backchannel Authentication (CIBA) {{OpenID.CIBA}} for scenarios where the Delegated Actor operates as a background process and the Granting User is not currently interacting with the Client.
-   * Direct front-channel authorization as a baseline for low-complexity or legacy clients where PAR is not supported.
+3. Upfront Actor Validation via PAR, allowing the Client to submit the `actor_token` during initiation so the Authorization Server can validate the Delegated Actor's identity before prompting the Granting User for consent.
 
-4. Upfront Actor Validation via PAR and CIBA, allowing the Client to submit the `actor_token` during initiation so the Authorization Server can validate the Delegated Actor's identity before prompting the Granting User for consent.
+4. A Dynamic Consent mechanism, wherein the authorization flow can be initiated or re-initiated by a resource server challenge, enabling real-time "human-in-the-loop" consent acquisition when the Delegated Actor encounters an access barrier.
 
-5. A Dynamic Consent mechanism, wherein the authorization flow can be initiated or re-initiated by a resource server challenge, enabling real-time "human-in-the-loop" consent acquisition when the Delegated Actor encounters an access barrier.
+5. Structured claims in the resulting access token (following {{RFC9068}}), capturing the identities of the Granting User, the Delegated Actor, and the Client for transparency, auditability, and downstream policy enforcement.
 
-6. Structured claims in the resulting access token (following {{RFC9068}}), capturing the identities of the Granting User, the Delegated Actor, and the Client for transparency, auditability, and downstream policy enforcement.
+6. Defined error codes for delegation-specific failure modes, including scenarios where consent is denied or where the Delegated Actor's identity does not match the consented delegation.
 
-7. Defined error codes for delegation-specific failure modes, including scenarios where consent is denied or where the Delegated Actor's identity does not match the consented delegation.
+This approach builds on existing OAuth 2.0 infrastructure and is designed to be technology-agnostic: while AI agents are a prominent use case, the protocol applies equally to any automated system, script, or sub-process that must act on behalf of a human user. The same delegation parameters and semantics defined for PAR are also applicable to Client-Initiated Backchannel Authentication (CIBA) {{OpenID.CIBA}} for ambient use cases (see {{ciba-appendix}}) and to the standard OAuth 2.0 Authorization Code Grant {{RFC6749}} for low-complexity or legacy deployments (see {{direct-appendix}}).
 
-This approach builds on existing OAuth 2.0 infrastructure and is designed to be technology-agnostic: while AI agents are a prominent use case, the protocol applies equally to any automated system, script, or sub-process that must act on behalf of a human user.
+Although this specification uses the term "Delegated Actor" to refer primarily to autonomous software entities, the on-behalf-of delegation model is equally applicable to scenarios where a human user acts on behalf of another human user. For example, an IT support technician who needs to access an employee's account settings to resolve a help-desk ticket can be modeled as a Delegated Actor: the employee (Granting User) authorizes the technician (Delegated Actor) through the Client's delegation flow. In such cases, the CIBA mode ({{ciba-appendix}}) is particularly well-suited, as the employee can approve the delegation request out-of-band -- via a push notification or authentication app -- without needing to be co-present with the technician. The `actor_token` identifies the human actor (the technician), and the resulting access token carries the same structured `act` claim, providing a clear audit trail of who acted on whose behalf.
 
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in BCP 14 {{RFC2119}} {{RFC8174}} when, and only when, they appear in all capitals, as shown here.
 
@@ -111,9 +90,6 @@ Client:
 Dynamic Consent:
 : A consent model in which the Granting User's authorization is obtained or refreshed in real time, at the moment a Delegated Actor encounters an access barrier. Unlike static, upfront consent, Dynamic Consent supports a "human-in-the-loop" pattern: the Delegated Actor's flow is interrupted, consent is solicited from the Granting User via the Authorization Server, and the flow resumes once consent is granted. Dynamic Consent MAY be triggered by a resource server challenge (HTTP 401 or 403), or proactively by the Client when a new delegation scope is required.
 
-Intent Scope:
-: A scope value or structured scope parameter that conveys the Delegated Actor's intended action or purpose, rather than a static resource permission. Intent Scopes allow the Authorization Server to present the Granting User with a meaningful description of what the Delegated Actor intends to do (e.g., "schedule a meeting on your behalf" or "rebalance your portfolio using conservative strategy"), enabling more informed consent decisions. Intent Scopes are OPTIONAL and complement traditional OAuth 2.0 scope values.
-
 Authorization Server:
 : The server that authenticates the Granting User, obtains their consent for delegation to a specific Delegated Actor, and issues access tokens. The Authorization Server MUST be capable of recognizing Delegated Actor identifiers and binding authorization codes to the tuple of (Granting User, Client, Delegated Actor).
 
@@ -121,53 +97,43 @@ Resource Server:
 : The server hosting the protected resources, capable of accepting and validating access tokens. A Resource Server MAY challenge a Client or Delegated Actor with an HTTP 401 or 403 response to trigger the Dynamic Consent flow. Examples include API servers, data stores, tool-hosting services, and inter-service endpoints.
 
 Authorization Code:
-: A temporary, single-use credential issued by the Authorization Server to the Client's redirect URI after the Granting User has authenticated and granted consent for a specific Delegated Actor to act on their behalf. The Authorization Code is bound to the Granting User, Client, and the consented Delegated Actor. Authorization Codes are issued in PAR (Option A) and Direct (Option C) modes only. In CIBA (Option B), the Access Token is obtained through the CIBA token delivery modes (poll, ping, or push) per {{OpenID.CIBA}}.
+: A temporary, single-use credential issued by the Authorization Server to the Client's redirect URI after the Granting User has authenticated and granted consent for a specific Delegated Actor to act on their behalf. The Authorization Code is bound to the Granting User, Client, and the consented Delegated Actor.
 
 Actor Token:
-: A security token (e.g., a JWT {{RFC7519}}) used by a Delegated Actor to cryptographically authenticate itself to the Authorization Server during the token exchange. The `sub` claim of an Actor Token MUST identify the Delegated Actor. A Delegated Actor obtains an Actor Token through a separate authentication mechanism (e.g., client credentials grant, mutual TLS, or an identity provider flow), which is outside the scope of this specification.
+: A security token (e.g., a JWT {{RFC7519}}) used by a Delegated Actor to cryptographically authenticate itself to the Authorization Server during the token exchange. The `sub` claim of an Actor Token MUST identify the Delegated Actor. A Delegated Actor obtains an Actor Token through a separate authentication mechanism (e.g., client credentials grant, mutual TLS, or an identity provider flow); see {{actor-token-acquisition}} for detailed recommendations.
 
 Access Token:
 : An access token issued by the Authorization Server, permitting the bearer to access protected resources on behalf of a specific Granting User. When issued via this flow, the Access Token explicitly documents the delegation path through structured claims identifying the Granting User, the Delegated Actor, and the Client.
 
 Pushed Authorization Request (PAR):
-: A mechanism defined in {{RFC9126}} that allows the Client to submit authorization request parameters directly to the Authorization Server via a back-channel POST request, receiving a `request_uri` in return. The Client then uses this `request_uri` in the front-channel redirect. In this specification, PAR provides request integrity protection and enables upfront validation of the Delegated Actor before the Granting User is redirected for authorization.
-
-Client-Initiated Backchannel Authentication (CIBA):
-: A mechanism defined in {{OpenID.CIBA}} enabling the Client to request user authorization without the Granting User interacting with the Client's user-agent. The Authorization Server contacts the Granting User through an out-of-band channel to obtain consent. See {{OpenID.CIBA}} for the full specification.
-
-Binding Message:
-: A short, human-readable string included in a CIBA authentication request that the Authorization Server MUST display to the Granting User on their out-of-band device. The Binding Message MUST accurately reflect the `intent_scope` and the Delegated Actor's identity. See Section 7.1 of {{OpenID.CIBA}} for the base parameter definition.
+: A mechanism defined in {{RFC9126}} that allows the Client to submit authorization request parameters directly to the Authorization Server via a back-channel POST request, receiving a `request_uri` in return. The Client then uses this `request_uri` in the front-channel redirect. PAR is the authorization initiation mechanism used by this specification, providing request integrity protection and enabling upfront validation of the Delegated Actor before the Granting User is redirected for authorization.
 
 Step-Up Authorization Challenge:
 : A mechanism by which a Resource Server signals to a Client that the authorization associated with the presented access token does not meet the Resource Server's requirements (e.g., HTTP 401 Unauthorized due to an invalid/missing token, or HTTP 403 Forbidden due to insufficient scope). In this specification, the Step-Up Authorization Challenge is the RECOMMENDED mechanism for Resource Servers to trigger the Dynamic Consent flow.
 
 # Protocol Overview
 
-This section provides a high-level summary of the delegation flow. Detailed normative requirements for each step are specified in the subsequent sections.
+This section provides a high-level summary of the delegation flow using Pushed Authorization Requests (PAR) {{RFC9126}}. Detailed normative requirements for each step are specified in the subsequent sections. For applicability to CIBA and the standard Authorization Code Grant (direct mode), see {{ciba-appendix}} and {{direct-appendix}} respectively.
 
 ## High-Level Flow
 
-1. The Delegated Actor signals to the Client that it needs to perform an action on the Granting User's behalf, providing its identifier (ActorID) and optionally an Intent Scope describing the desired action.
+1. The Delegated Actor signals to the Client that it needs to perform an action on the Granting User's behalf, or use the Client as a means to obtain access to act upon the Granting User's resources, providing its identifier (ActorID) and optionally describing the desired action.
 
 2. The Client attempts the action by making a request to the Resource Server (with an existing access token, if available).
 
 3. If access is unsuccessful (e.g., HTTP 401 or HTTP 403), the Resource Server challenges the Client. This challenge triggers the Dynamic Consent mechanism.
 
-4. The Client selects an authorization initiation mode based on the Delegated Actor's operational context and the Granting User's availability: (a) PAR for interactive sessions (RECOMMENDED), (b) CIBA for background/offline scenarios, or (c) direct front-channel authorization as a baseline.
+4. The Client submits the authorization parameters to the Authorization Server's PAR endpoint, including the `requested_actor` and the required scopes. The Client SHOULD include the `actor_token` for upfront validation.
 
-5. The Client initiates the authorization flow, including the `requested_actor` parameter and optionally Intent Scope values. For PAR and CIBA, the Client includes the `actor_token` for upfront validation.
+5. The Authorization Server validates the request parameters, including recording the `requested_actor` and (if provided) validating the `actor_token`. The `requested_actor` is bound to the authorization session.
 
-6. The Authorization Server validates the request parameters, including verifying the `requested_actor` and (if provided) the `actor_token`. The validated actor identity is bound to the authorization session.
+6. The Authorization Server returns a `request_uri`. The Client redirects the Granting User's user-agent to the Authorization Server using the `request_uri`.
 
 7. The Authorization Server authenticates the Granting User and presents a consent screen detailing the Client, the Delegated Actor, and the requested permissions. This is the "human-in-the-loop" decision point.
 
-8. Upon Granting User consent:
-   * **PAR and Direct modes:** The Authorization Server issues an Authorization Code and redirects the user-agent to the Client's `redirect_uri`.
-   * **CIBA mode:** The Authorization Server records consent and prepares to issue an Access Token via the configured token delivery mode.
+8. Upon Granting User consent, the Authorization Server issues an Authorization Code and redirects the user-agent to the Client's `redirect_uri`.
 
-9. The Client obtains an Access Token:
-   * **PAR and Direct modes:** The Client exchanges the Authorization Code at the token endpoint, including the `actor_token` and PKCE `code_verifier`.
-   * **CIBA mode:** The token is obtained via poll, ping, or push delivery modes per {{OpenID.CIBA}}.
+9. The Client exchanges the Authorization Code at the token endpoint, including the `actor_token` and PKCE `code_verifier`.
 
 10. The Authorization Server validates the request and issues an Access Token (JWT per {{RFC9068}}) containing claims that identify the Granting User (`sub`), the Client (`azp`), and the Delegated Actor (`act`).
 
@@ -177,7 +143,7 @@ This section provides a high-level summary of the delegation flow. Detailed norm
 
 ## Sequence Diagram
 
-The following diagram illustrates the interactive flow (PAR and Direct modes). For CIBA flows, steps 4-12 are replaced by the backchannel authentication and token delivery mechanisms described in the Option B section.
+The following diagram illustrates the delegation flow using PAR.
 
 ~~~ ascii-art
     +-----------+   +--------+   +-----------------+   +---------------------+   +---------------+
@@ -185,7 +151,7 @@ The following diagram illustrates the interactive flow (PAR and Direct modes). F
     +-----------+   +--------+   +-----------------+   +---------------------+   +---------------+
           |             |              |                   |                       |
           |     (1) Signals need to act on Granting User's behalf                 |
-          |             |  by passing ActorID (+ optional Intent Scope)            |
+          |             |  by passing ActorID and requested scopes                 |
           |             |<-------------|                   |                       |
           |             |              |                   |                       |
           |             |              (2) Client attempts action                  |
@@ -203,14 +169,19 @@ The following diagram illustrates the interactive flow (PAR and Direct modes). F
     |     |             |           Bearer error="invalid_token"                   |        |
     |     |             |<-------------------------------------------------------- |        |
     |     |             |              |                   |                       |        |
-    |  (4) Redirect to AS (for User Authentication and Consent)                    |        |
-    |              with requested_actor request parameter                          |        |
+    |     |             |  (4) PAR Request to AS           |                       |        |
+    |     |             |--------------------------------->|                       |        |
+    |     |             |              |                   |                       |        |
+    |     |             |  (5) request_uri returned        |                       |        |
+    |     |             |<---------------------------------|                       |        |
+    |     |             |              |                   |                       |        |
+    |  (6) Redirect to AS with request_uri                 |                       |        |
     |     |<------------|              |                   |                       |        |
     |     |             |              |                   |                       |        |
-    |     |         (5) Authorization Request              |                       |        |
+    |     |         (7) Authorization Request              |                       |        |
     |     |----------------------------------------------->|                       |        |
     |     |             |              |                   |                       |        |
-    |     |     (6) User Authenticates & Consents          |                       |        |
+    |     |     (8) User Authenticates & Consents          |                       |        |
     |     |<---------------------------------------------->|                       |        |
     |     |             |              |                   |                       |        |
     |------------------------------------[If Forbidden]------------------------------------|
@@ -219,75 +190,73 @@ The following diagram illustrates the interactive flow (PAR and Direct modes). F
     |     |             |              |            |   Insufficient Authorization   |    |
     |     |             |              |            +---------------------------------+    |
     |     |             |              |                   |                       |        |
-    |     |               (7) CHALLENGE: HTTP 403, WWW-Authenticate:               |        |
+    |     |               (9) CHALLENGE: HTTP 403, WWW-Authenticate:               |        |
     |     |       Bearer error="insufficient_scope" required_scope="scope1 scope2" |        |
     |     |             |<-------------------------------------------------------- |        |
     |     |             |              |                   |                       |        |
-    |  (8) Redirect to AS (for User Consent)               |                       |        |
-    |    with requested_actor request parameter             |                       |        |
+    |     |             |  (10) PAR Request to AS with required scopes             |        |
+    |     |             |--------------------------------->|                       |        |
+    |     |             |              |                   |                       |        |
+    |     |             |  (11) request_uri returned       |                       |        |
+    |     |             |<---------------------------------|                       |        |
+    |     |             |              |                   |                       |        |
+    |  (12) Redirect to AS with request_uri                |                       |        |
     |     |<------------|              |                   |                       |        |
     |     |             |              |                   |                       |        |
-    |     |         (9) Authorization Request              |                       |        |
+    |     |         (13) Authorization Request             |                       |        |
     |     |----------------------------------------------->|                       |        |
     |     |             |              |                   |                       |        |
-    |     |            (10) User Consents                  |                       |        |
+    |     |            (14) User Consents                  |                       |        |
     |     |<---------------------------------------------->|                       |        |
     |---------------------------------------------------------------------------------------|
     |     |             |              |                   |                       |        |
-    |     | (11) Redirect with Authorization Code          |                       |        |
+    |     | (15) Redirect with Authorization Code          |                       |        |
     |     |<-----------------------------------------------|                       |        |
     |     |             |              |                   |                       |        |
-    |     | (12) Authorization Code    |                   |                       |        |
+    |     | (16) Authorization Code    |                   |                       |        |
     |     |------------>|              |                   |                       |        |
     |     |             |              |                   |                       |        |
-    |     |             | (13) Token Request with actor_token                      |        |
+    |     |             | (17) Token Request with actor_token                      |        |
     |     |             |--------------------------------->|                       |        |
     |     |             |              |                   |                       |        |
-    |     |             |  (14) Access Token (JWT)         |                       |        |
+    |     |             |  (18) Access Token (JWT)         |                       |        |
     |     |             |<---------------------------------|                       |        |
     |     |             |              |                   |                       |        |
-    |     |             |  (15) Client Retries Action with Access Token            |        |
+    |     |             |  (19) Client Retries Action with Access Token            |        |
     |     |             |--------------------------------------------------------->|        |
     \---------------------------------------------------------------------------------------/
     /------------------------------------ Access Successful --------------------------------\
     |     |             |              |                   |                       |        |
-    |     |             |  (16) Protected Resource / Action Succeeded              |        |
+    |     |             |  (20) Protected Resource / Action Succeeded              |        |
     |     |             |<---------------------------------------------------------|        |
     \---------------------------------------------------------------------------------------/
 ~~~
 
-# Authorization Initiation
+# Authorization Request
 
-This section defines three options for how the Client initiates the authorization flow. The appropriate mode depends on the Delegated Actor's operational context, the required security level, and whether the Granting User is actively interacting with the Client.
+This section defines the authorization request flow using Pushed Authorization Requests (PAR) {{RFC9126}}. The Client submits authorization parameters directly to the Authorization Server's PAR endpoint over a back-channel connection, receiving a `request_uri` that is subsequently used to redirect the Granting User for consent.
 
-## Initiation Mode Selection
+> **Note:** For deployments where the Authorization Server does not support PAR, the same delegation parameters can be used with a direct front-channel Authorization Code Grant request. See {{direct-appendix}} for the full specification. For ambient use cases where the Granting User is not actively interacting with the Client, see {{ciba-appendix}} for the CIBA-based flow.
 
-The Client MUST choose one of the following initiation modes:
+## Actor Validation Model
 
-Option A -- Pushed Authorization Request (PAR) {{RFC9126}} (RECOMMENDED):
-: Use when the Granting User is actively present. PAR transmits all authorization parameters (including the `requested_actor` and the `actor_token`) server-to-server over TLS, preventing parameter tampering in the user-agent and enabling upfront actor validation.
+In both the PAR-based flow and the Direct Authorization Code Grant mode ({{direct-appendix}}), the authorization request MAY be initiated with only the `requested_actor` parameter, without an `actor_token`. The `actor_token` is REQUIRED at the token endpoint, where the Authorization Server performs authoritative Delegated Actor authentication and MUST verify that the `actor_token`'s `sub` claim matches the `requested_actor` bound to the Authorization Code.
 
-Option B -- Client-Initiated Backchannel Authentication (CIBA) {{OpenID.CIBA}}:
-: Use when the Delegated Actor is running as a background process and the Granting User is NOT currently interacting with the Client (e.g., scheduled batch jobs, background monitoring agents, after-hours automation). The Authorization Server contacts the Granting User through an out-of-band channel (push notification, SMS, authentication app) to obtain consent.
+This design allows the authorization and consent flow to proceed based solely on the `requested_actor` identifier, deferring cryptographic actor authentication to the token exchange. The Granting User consents to delegation to a named Delegated Actor, and the `actor_token` presented at the token endpoint proves that the entity requesting the token is in fact that actor.
 
-Option C -- Direct Authorization Request:
-: Retained as a baseline for low-complexity or legacy clients/authorization servers where PAR is not supported. The authorization parameters are transmitted through the user-agent via query parameters. This option does NOT support upfront `actor_token` validation; the `actor_token` is only presented at the token endpoint.
+## Upfront Actor Validation (PAR)
 
-## Upfront Actor Validation (PAR and CIBA)
-
-To ensure the integrity of the delegation process before involving the Granting User, the Client SHOULD include the `actor_token` and `actor_token_type` parameters in the PAR or CIBA initiation request. If provided, the Authorization Server MUST validate the `actor_token` before prompting the Granting User for consent. This upfront validation:
+When using PAR, the Client SHOULD include the `actor_token` and `actor_token_type` parameters in the PAR request for upfront validation. If provided, the Authorization Server MUST validate the `actor_token` before prompting the Granting User for consent. This upfront validation provides additional security benefits:
 
 * Confirms the Delegated Actor's identity and token validity before the Granting User is asked to make a consent decision.
 * Prevents wasted user interactions if the Delegated Actor's credentials are invalid, expired, or revoked.
-* Binds the validated actor identity to the authorization session (the PAR `request_uri` or the CIBA `auth_req_id`), enabling the Authorization Server to verify continuity at the token endpoint.
+* Binds the validated actor identity to the `request_uri` session, enabling the Authorization Server to verify continuity at the token endpoint.
 
-If the `actor_token` fails upfront validation, the Authorization Server MUST reject the request with the error code `invalid_actor_token` and MUST NOT continue to the authorization flow, leaving the Granting User uninvolved.
+If the `actor_token` is included and fails upfront validation, the Authorization Server MUST reject the request with the error code `invalid_actor_token` and MUST NOT continue to the authorization flow, leaving the Granting User uninvolved.
 
-## Option A: Pushed Authorization Request (PAR) (RECOMMENDED)
+> **Note:** Upfront actor validation is not available in the Direct Authorization Code Grant mode ({{direct-appendix}}), because the `actor_token` MUST NOT be transmitted through the user-agent. In direct mode, the `actor_token` is only presented at the token endpoint.
 
-For standard interactive sessions where the Granting User is actively interacting with the Client, the Client SHOULD use Pushed Authorization Requests {{RFC9126}} to submit the authorization parameters directly to the Authorization Server's PAR endpoint over a back-channel connection.
-
-### PAR Request
+## PAR Request
 
 ~~~
 POST /par HTTP/1.1
@@ -299,7 +268,6 @@ response_type=code&
 client_id=<client_id>&
 redirect_uri=<redirect_uri>&
 scope=<scope>&
-intent_scope=<intent_scope>&
 code_challenge=<code_challenge>&
 code_challenge_method=S256&
 requested_actor=<actor_id>&
@@ -307,35 +275,61 @@ actor_token=<actor_token>&
 actor_token_type=urn:ietf:params:oauth:token-type:jwt
 ~~~
 
-### PAR Request Parameters
+## Request Parameters
 
-All parameters from the Direct Authorization Request (Option C) are valid in the PAR request, with the following additions:
+The following parameters are defined for the authorization request.
+
+response_type:
+: REQUIRED. Value MUST be set to `code`, per OAuth 2.0 (Section 4.1.1 of {{RFC6749}}).
+
+client_id:
+: REQUIRED. The identifier of the Client as registered with the Authorization Server.
+
+redirect_uri:
+: REQUIRED. The Client's redirection endpoint as registered with the Authorization Server.
+
+scope:
+: RECOMMENDED. A space-delimited list of OAuth 2.0 scope values representing the permissions the Delegated Actor requires (e.g., `read:email write:calendar`). Deployments MAY use prefixed scope values to convey the Delegated Actor's intent (see {{consent-scope-prefix}}).
+
+state:
+: RECOMMENDED. An opaque value used by the Client to maintain state between the request and callback, per Section 4.1.1 of {{RFC6749}}.
+
+code_challenge:
+: REQUIRED. The PKCE code challenge, per {{RFC7636}}.
+
+code_challenge_method:
+: REQUIRED. Value MUST be set to `S256`, per {{RFC7636}}.
+
+requested_actor:
+: REQUIRED. The unique identifier of the Delegated Actor for which the Client is requesting delegated access on behalf of the Granting User. This identifier MUST uniquely identify the Delegated Actor within the Authorization Server's domain and MUST be understood by the Authorization Server.
 
 actor_token:
-: RECOMMENDED. The security token used to authenticate the Delegated Actor, submitted for upfront validation. This token MUST be a valid token (e.g., a JWT {{RFC7519}}) issued to the Delegated Actor and MUST include the `sub` claim identifying the Delegated Actor. If provided, the Authorization Server MUST validate this token and bind the verified actor identity to the resulting `request_uri`.
+: RECOMMENDED for PAR. The security token used to authenticate the Delegated Actor, submitted for upfront validation. This token MUST be a valid token (e.g., a JWT {{RFC7519}}) issued to the Delegated Actor and MUST include the `sub` claim identifying the Delegated Actor. If provided, the Authorization Server MUST validate this token and bind the verified actor identity to the resulting `request_uri`. If not provided, the flow proceeds with the `requested_actor` identifier alone; the `actor_token` is then REQUIRED at the token endpoint (see the Access Token Request and Response section). In the Direct Authorization Code Grant mode ({{direct-appendix}}), this parameter MUST NOT be included in the front-channel request; it is only presented at the token endpoint. In the CIBA mode ({{ciba-appendix}}), the `actor_token` MUST be included in the back-channel initiation request.
 
 actor_token_type:
 : REQUIRED if `actor_token` is present. An identifier for the type of the `actor_token`, per Section 3 of {{RFC8693}}. For JWT-based actor tokens, the value MUST be `urn:ietf:params:oauth:token-type:jwt`.
 
-### Authorization Server Processing (PAR)
+## Authorization Server Processing
 
 Upon receiving the PAR request, the Authorization Server MUST perform the following steps:
 
 1. Authenticate the Client if applicable.
 
-2. Validate the request parameters according to {{RFC9126}} and the parameter rules defined in Option C.
+2. Validate the request parameters according to {{RFC9126}} and the parameter definitions above.
 
-3. Validate the `requested_actor`. The Authorization Server MUST verify that the provided `requested_actor` corresponds to a recognized Delegated Actor identity. If the `requested_actor` is unknown, the Authorization Server MUST return an error response with the error code `invalid_actor`.
+3. Record the `requested_actor` value and bind it to the `request_uri` session. The Authorization Server MAY optionally validate the `requested_actor` against a registry of known Delegated Actor identities if one is maintained, and MAY reject the request with the error code `invalid_actor` if the actor has been explicitly blocked by policy. However, pre-registration of actor identities is NOT REQUIRED; the Authorization Server MAY accept any `requested_actor` value, deferring authoritative actor authentication to the token endpoint where the `actor_token` is mandatory.
 
-4. If `actor_token` is present:
-   a. Validate the token's signature, issuer, audience (if applicable), and expiration. The token MUST NOT be expired or revoked.
+4. If `actor_token` is present (upfront validation):
+   a. Validate the token's signature, issuer, audience (if applicable), and expiration. The token MUST NOT be expired or revoked. If the issuer is external, the Authorization Server SHOULD verify trust in the issuer over a preferred mechanism.
    b. Extract the Delegated Actor identity from the `actor_token`'s `sub` claim.
    c. Verify that the `sub` claim matches the `requested_actor` parameter. If they do not match, the Authorization Server MUST return an error with the error code `actor_mismatch`.
-   d. Bind the validated actor identity to the `request_uri` session.
+   d. Bind the validated actor identity to the `request_uri` session alongside the `requested_actor`.
 
-5. If all validations pass, return the `request_uri`.
+5. If `actor_token` is NOT present, the flow proceeds with the `requested_actor` identifier alone. The Authorization Server binds the `requested_actor` to the authorization session; authoritative Delegated Actor authentication will occur at the token endpoint.
 
-### PAR Response
+6. If all validations pass, return the `request_uri`.
+
+## PAR Response
 
 If the request is valid, the Authorization Server returns a `request_uri`:
 
@@ -352,174 +346,29 @@ Cache-Control: no-store
 
 If validation fails, the Authorization Server returns an error response per {{RFC9126}} Section 2.3, using the error codes defined in the Error Codes section.
 
-### Front-Channel Redirect (PAR)
+## Front-Channel Redirect and Consent
 
 The Client then redirects the Granting User's user-agent using the `request_uri`:
 
 ~~~
-GET /authorize?client_id=<client_id>&
-request_uri=urn:ietf:params:oauth:request_uri:6esc_11ACC5bwc014ltc14eY22c HTTP/1.1
+GET /authorize?client_id=<client_id>&request_uri=urn:ietf:params:oauth:request_uri:6esc_11ACC5bwc014ltc14eY22c HTTP/1.1
 Host: authorization-server.example.com
 ~~~
 
-The Authorization Server resolves the `request_uri`, presents the consent screen to the Granting User, and upon consent, issues an Authorization Code as defined in the Authorization Code Response section.
+The Authorization Server resolves the `request_uri` and presents a consent screen to the Granting User (the "human-in-the-loop" decision point). This screen SHOULD clearly indicate:
 
-## Option B: Client-Initiated Backchannel Authentication (CIBA)
+* The name or identity of the Client application initiating the request.
+* The identity and description of the Delegated Actor (`requested_actor`) for which delegation is being requested.
+* The specific scopes of access being requested.
+* A clear indication that the Granting User is authorizing an autonomous entity to act on their behalf.
 
-When the Delegated Actor is operating as a background process and the Granting User is NOT currently interacting with the Client, the Client SHOULD use CIBA {{OpenID.CIBA}} to obtain authorization through an out-of-band channel (e.g., push notification, SMS). See Section 4 of {{OpenID.CIBA}} for the base authentication request specification.
-
-### CIBA Authentication Request
-
-~~~
-POST /bc-authorize HTTP/1.1
-Host: authorization-server.example.com
-Content-Type: application/x-www-form-urlencoded
-Authorization: Basic <client_credentials>
-
-scope=<scope>&
-intent_scope=<intent_scope>&
-client_id=<client_id>&
-login_hint=<granting_user_identifier>&
-binding_message=<human_readable_intent_description>&
-requested_actor=<actor_id>&
-actor_token=<actor_token>&
-actor_token_type=urn:ietf:params:oauth:token-type:jwt
-~~~
-
-### CIBA-Specific Parameters
-
-In addition to standard OAuth 2.0 parameters (`scope`, `client_id`) and the delegation-specific parameters introduced by this specification (`intent_scope`, `requested_actor`, `actor_token`, `actor_token_type`), the CIBA request includes parameters defined in Section 7.1 of {{OpenID.CIBA}}. Of particular note:
-
-login_hint:
-: REQUIRED. Identifies the Granting User per Section 7.1 of {{OpenID.CIBA}}.
-
-binding_message:
-: REQUIRED for this specification. A human-readable string displayed to the Granting User on their authentication device. This message MUST accurately reflect the `intent_scope` and the Delegated Actor's identity (e.g., `"Allow rebalancer-v1 to execute trades on your portfolio"`).
-
-See Section 7.1 of {{OpenID.CIBA}} for additional standard parameters (`id_token_hint`, `login_hint_token`, `requested_expiry`, `client_notification_token`, etc.).
-
-### Binding Message Integrity
-
-The `binding_message` MUST be semantically consistent with the `intent_scope` and `scope` parameters. If a mismatch is detected, the Authorization Server MUST reject the request with `invalid_binding_message`. See the Binding Message Integrity subsection under Security Considerations for detailed requirements.
-
-### Authorization Server Processing (CIBA)
-
-Upon receiving the CIBA authentication request, the Authorization Server MUST:
-
-1. Authenticate the Client and validate standard CIBA parameters per Section 7.3 of {{OpenID.CIBA}}.
-2. Validate the `requested_actor` and the `actor_token` per the upfront validation rules defined above.
-3. Validate `binding_message` integrity (see above). If a mismatch is detected, reject with `invalid_binding_message`.
-4. Resolve the `login_hint` to identify the Granting User. If the Granting User cannot be identified, reject with `invalid_request`.
-5. Initiate the out-of-band consent flow, displaying the `binding_message`, Delegated Actor identity, and requested permissions.
-
-### CIBA Authentication Response
-
-If valid, the Authorization Server returns an `auth_req_id` per Section 7.3 of {{OpenID.CIBA}}. The `auth_req_id` binds the validated Delegated Actor identity to the pending transaction.
-
-### CIBA Token Delivery Modes
-
-CIBA defines three token delivery modes -- **poll**, **ping**, and **push** -- as specified in Sections 10, 11, and 12 of {{OpenID.CIBA}} respectively. In all three modes, the `auth_req_id` serves as the secure handle for the pending delegation. Because the Delegated Actor's identity was already validated and bound to the `auth_req_id` during the initial CIBA authentication request, subsequent requests to the token endpoint SHOULD NOT include the `actor_token` unless the Authorization Server requires a fresh proof-of-presence at the moment of token issuance. If fresh proof-of-presence is required, the Authorization Server MUST advertise this via its discovery metadata (e.g., `ciba_actor_token_at_token_endpoint_required: true`).
-
-#### Poll Mode
-
-The Client polls the token endpoint per Section 10 of {{OpenID.CIBA}}:
-
-~~~
-POST /token HTTP/1.1
-Host: authorization-server.example.com
-Content-Type: application/x-www-form-urlencoded
-Authorization: Basic <client_credentials>
-
-grant_type=urn:openid:params:grant-type:ciba&
-auth_req_id=1c266114-a1be-4252-8ad1-04986c5b9ac1&
-client_id=<client_id>
-~~~
-
-The Authorization Server returns `authorization_pending` while the Granting User has not responded. The Client MUST respect the `interval` value and MUST NOT poll more frequently. Upon consent, the Authorization Server returns an Access Token with the delegation claims defined in the Access Token Structure and Claims section. If consent is denied, the Authorization Server returns `error=consent_denied`.
-
-#### Ping Mode
-
-In ping mode (Section 11 of {{OpenID.CIBA}}), the Authorization Server notifies the Client's pre-registered callback endpoint with the `auth_req_id` when the Granting User responds. The Client then retrieves the token from the token endpoint using the same request format as poll mode. The Client MUST validate the `client_notification_token` on every callback invocation.
-
-#### Push Mode
-
-In push mode (Section 12 of {{OpenID.CIBA}}), the Authorization Server delivers the Access Token directly to the Client's callback endpoint upon Granting User consent. No Client-initiated token request occurs. The pushed Access Token MUST contain the same delegation claims (`sub`, `azp`, `act`) as tokens issued through poll or ping modes. Because there is no Client-initiated token request in push mode, there is no opportunity to present an `actor_token` at issuance time; the actor binding relies entirely on the upfront validation during the CIBA authentication request.
-
-## Option C: Direct Authorization Request (Baseline)
-
-For low-complexity or legacy Clients where PAR is not supported, the Client MAY use a direct front-channel authorization request. This is the standard OAuth 2.0 Authorization Code Grant extended with the `requested_actor` parameter.
-
-Note: This option does NOT support upfront `actor_token` validation. The authorization parameters are transmitted through the user-agent, and the `actor_token` MUST NOT be included in the front-channel request (to avoid exposing it in the user-agent). The `actor_token` is only presented at the token endpoint.
-
-### Direct Authorization Request
-
-~~~
-GET /authorize?response_type=code&
-client_id=<client_id>&
-redirect_uri=<redirect_uri>&
-scope=<scope>&
-intent_scope=<intent_scope>&
-state=<state>&
-code_challenge=<code_challenge>&
-code_challenge_method=S256&
-requested_actor=<actor_id> HTTP/1.1
-Host: authorization-server.example.com
-~~~
-
-### Request Parameters
-
-response_type:
-: REQUIRED. Value MUST be set to `code`, per OAuth 2.0 (Section 4.1.1 of {{RFC6749}}).
-
-client_id:
-: REQUIRED. The identifier of the Client as registered with the Authorization Server.
-
-redirect_uri:
-: REQUIRED. The Client's redirection endpoint as registered with the Authorization Server.
-
-scope:
-: RECOMMENDED. A space-delimited list of OAuth 2.0 scope values representing the permissions the Delegated Actor requires (e.g., `read:email write:calendar`).
-
-intent_scope:
-: OPTIONAL. A structured scope parameter or URI describing the Delegated Actor's intended action or purpose in human-readable or machine-parseable form (e.g., `intent:schedule_meeting` or `urn:example:rebalance_portfolio:conservative`). The Authorization Server SHOULD use this value to enhance the consent screen with a meaningful description of what the Delegated Actor intends to do. If the Authorization Server does not recognize the `intent_scope`, it MUST ignore it and fall back to the standard `scope` parameter.
-
-state:
-: RECOMMENDED. An opaque value used by the Client to maintain state between the request and callback, per Section 4.1.1 of {{RFC6749}}.
-
-code_challenge:
-: REQUIRED. The PKCE code challenge, per {{RFC7636}}.
-
-code_challenge_method:
-: REQUIRED. Value MUST be set to `S256`, per {{RFC7636}}.
-
-requested_actor:
-: REQUIRED. The unique identifier of the Delegated Actor for which the Client is requesting delegated access on behalf of the Granting User. This identifier MUST uniquely identify the Delegated Actor within the Authorization Server's domain and MUST be understood by the Authorization Server.
-
-### Authorization Server Processing (Direct)
-
-Upon receiving the authorization request, the Authorization Server MUST perform the following steps:
-
-1. Validate the request parameters according to the OAuth 2.0 Authorization Code Grant (Section 4.1.1 of {{RFC6749}}).
-
-2. Validate the `requested_actor`. The Authorization Server MUST verify that the provided `requested_actor` corresponds to a recognized Delegated Actor identity. If the `requested_actor` is unknown, the Authorization Server MUST return an error response with the error code `invalid_actor`.
-
-3. If an `intent_scope` parameter is present, the Authorization Server SHOULD resolve it to a human-readable description of the intended action for display on the consent screen.
-
-4. The Authorization Server MUST present a consent screen to the Granting User (the "human-in-the-loop" decision point). This screen MUST clearly indicate:
-   * The name or identity of the Client application initiating the request.
-   * The identity and description of the Delegated Actor (`requested_actor`) for which delegation is being requested.
-   * The specific scopes of access being requested, and if available, the intent description derived from `intent_scope`.
-   * A clear indication that the Granting User is authorizing an autonomous entity to act on their behalf.
-
-If the request is valid and the Granting User grants consent, the Authorization Server proceeds to issue an Authorization Code. If the Granting User denies consent, the Authorization Server MUST return an error response with the error code `consent_denied`. If the request is invalid, the Authorization Server returns an appropriate error response.
+Upon consent, the Authorization Server issues an Authorization Code as defined in the Authorization Response section. If the Granting User denies consent, the Authorization Server MUST return an error response with the error code `consent_denied`.
 
 # Authorization Response
 
-## Authorization Code Response (PAR and Direct)
+## Authorization Code Response
 
-Regardless of whether the authorization was initiated via PAR or Direct mode, if the Granting User grants consent, the Authorization Server issues an Authorization Code and redirects the user-agent back to the Client's `redirect_uri`.
-
-Note: For CIBA mode, there is no Authorization Code; the Access Token is obtained through the CIBA token delivery modes (poll, ping, or push) described in the Option B section.
+If the Granting User grants consent, the Authorization Server issues an Authorization Code and redirects the user-agent back to the Client's `redirect_uri`.
 
 ~~~
 HTTP/1.1 302 Found
@@ -529,14 +378,14 @@ Location: <redirect_uri>?code=<authorization_code>&state=<state>
 ### Parameters
 
 code:
-: REQUIRED. The Authorization Code issued by the Authorization Server. This code is bound to the tuple (Granting User, Client, Delegated Actor, granted scopes). If the authorization was initiated via PAR with an upfront-validated `actor_token`, the validated actor identity is also bound to this code.
+: REQUIRED. The Authorization Code issued by the Authorization Server. This code is bound to the tuple (Granting User, Client, `requested_actor`, granted scopes). If the authorization was initiated via PAR with an upfront-validated `actor_token`, the validated actor identity is also bound to this code. In all cases, the `requested_actor` is bound to the code and will be verified against the `actor_token` at the token endpoint.
 
 state:
 : REQUIRED if the `state` parameter was present in the authorization request. The exact value received from the Client.
 
 ## Authorization Endpoint Error Response
 
-If the request fails or the Granting User denies consent, the Authorization Server redirects the user-agent back to the Client's `redirect_uri` with error parameters (for PAR and Direct modes). For CIBA mode, errors are returned as JSON responses at the backchannel endpoint or during token delivery.
+If the request fails or the Granting User denies consent, the Authorization Server redirects the user-agent back to the Client's `redirect_uri` with error parameters.
 
 ~~~
 HTTP/1.1 302 Found
@@ -547,11 +396,9 @@ See the Error Codes section for the complete list of error codes applicable to t
 
 # Access Token Request and Response
 
-## Token Request (PAR and Direct Modes)
+## Token Request
 
-For authorization flows initiated via PAR (Option A) or Direct (Option C) modes, the Client exchanges the Authorization Code for an Access Token at the Authorization Server's token endpoint using the `authorization_code` grant type. The Client MUST include the `actor_token` parameter to authenticate the Delegated Actor at the point of token issuance.
-
-Note: For CIBA (Option B), the Access Token is obtained through the CIBA token delivery modes (poll, ping, or push) described in the Option B section. Because the Delegated Actor's identity is validated and bound to the `auth_req_id` during the initial CIBA authentication request, subsequent token endpoint requests in CIBA poll and ping modes SHOULD NOT include the `actor_token` unless the Authorization Server requires a fresh proof-of-presence at the moment of token issuance. In CIBA push mode, the Access Token is delivered directly to the Client's callback endpoint and no separate token request is made.
+The Client exchanges the Authorization Code for an Access Token at the Authorization Server's token endpoint using the `authorization_code` grant type. The Client MUST include the `actor_token` parameter to authenticate the Delegated Actor at the point of token issuance.
 
 ~~~
 POST /token HTTP/1.1
@@ -586,7 +433,7 @@ redirect_uri:
 : REQUIRED. The same `redirect_uri` value that was included in the authorization request.
 
 actor_token:
-: REQUIRED. The security token used to authenticate the Delegated Actor at the moment of token issuance. This token MUST be a valid token (e.g., a JWT {{RFC7519}}) issued to the Delegated Actor and MUST include the `sub` claim identifying the Delegated Actor. The Client MUST send the `actor_token` regardless of whether it was previously submitted during PAR initiation; this ensures the Delegated Actor is still present and authorized at the time of issuance.
+: REQUIRED. The security token used to authenticate the Delegated Actor at the moment of token issuance. This token MUST be a valid token (e.g., a JWT {{RFC7519}}) issued to the Delegated Actor and MUST include the `sub` claim identifying the Delegated Actor. The `sub` claim MUST match the `requested_actor` value that was bound to the Authorization Code during the authorization request. The Client MUST send the `actor_token` regardless of whether it was previously submitted during PAR initiation; this is the authoritative point at which the Delegated Actor's identity is cryptographically verified.
 
 actor_token_type:
 : REQUIRED. An identifier for the type of the `actor_token`, per Section 3 of {{RFC8693}}. For JWT-based actor tokens, the value MUST be `urn:ietf:params:oauth:token-type:jwt`.
@@ -597,13 +444,13 @@ Upon receiving the token request, the Authorization Server MUST perform the foll
 
 1. Validate the request parameters according to the OAuth 2.0 Token Endpoint (Section 4.1.3 of {{RFC6749}}), including client authentication.
 
-2. Validate the `actor_token`: the Authorization Server MUST verify the token's signature, issuer, audience (if applicable), and expiration. The token MUST NOT be expired or revoked.
+2. Validate the `actor_token`: the Authorization Server MUST verify the token's signature, issuer, audience (if applicable), and expiration. The token MUST NOT be expired or revoked. If the issuer is external, the Authorization Server MUST verify trust in the issuer over a preferred mechanism.
 
 3. Extract the Delegated Actor identity from the `actor_token`'s `sub` claim.
 
-4. Verify that the authenticated Delegated Actor identity matches the `requested_actor` value that the Granting User consented to during the initial authorization request, which is bound to the Authorization Code.
+4. Verify that the `sub` claim of the `actor_token` matches the `requested_actor` value that was bound to the Authorization Code during the authorization request. If they do not match, the Authorization Server MUST reject the request with the error code `actor_mismatch`. This step is the authoritative binding between the Delegated Actor's cryptographic identity and the `requested_actor` that the Granting User consented to.
 
-5. **Actor Continuity Check (PAR-initiated flows):** If the authorization was initiated via PAR and an `actor_token` was validated and bound during the PAR request, the Authorization Server MUST verify that the `actor_token` presented at the token endpoint identifies the same Delegated Actor that was bound to the PAR session (`request_uri`). This ensures continuity between the upfront validation and the token issuance, preventing a different (potentially malicious) Delegated Actor from substituting itself between the PAR request and the code exchange.
+5. **Actor Continuity Check (PAR with upfront validation only):** If the authorization was initiated via PAR and an `actor_token` was validated and bound during the PAR request, the Authorization Server MUST additionally verify that the `actor_token` presented at the token endpoint identifies the same Delegated Actor that was bound to the PAR session (`request_uri`). This ensures continuity between the upfront validation and the token issuance. (Note: This check applies only when an `actor_token` was provided during PAR initiation. When PAR was initiated without an `actor_token`, or when using the Direct Authorization Code Grant mode ({{direct-appendix}}), step 4 is the sole actor identity verification.)
 
 6. Validate the PKCE `code_verifier` against the `code_challenge` associated with the Authorization Code.
 
@@ -763,7 +610,7 @@ Content-Type: application/json;charset=UTF-8
 }
 ~~~
 
-Upon receiving such a challenge, the Client SHOULD initiate the Dynamic Consent flow by redirecting the Granting User's user-agent to the Authorization Server.
+Upon receiving such a challenge, the Client SHOULD initiate the Dynamic Consent flow by submitting a PAR request to the Authorization Server.
 
 ## Dynamic Consent Hand-Off
 
@@ -771,39 +618,35 @@ The "human-in-the-loop" hand-off process works as follows:
 
 1. **Interruption:** The Delegated Actor requests the Client to perform an action at the Resource Server. The Resource Server responds with a challenge (401 or 403).
 
-2. **User-Agent Activation:** The Client activates the Granting User's user-agent (e.g., opens a browser window, sends a push notification with a deep link, or surfaces an in-app authorization prompt) and redirects it to the Authorization Server's authorization endpoint with the `requested_actor` and scope parameters.
+2. **PAR Submission:** The Client submits the authorization parameters (including `requested_actor`, `actor_token`, and the required scopes) to the Authorization Server's PAR endpoint to obtain a `request_uri`.
 
-3. **Consent Decision:** The Authorization Server presents the consent screen. The Granting User reviews the requested delegation and either grants or denies consent.
+3. **User Redirect:** The Client redirects the Granting User's user-agent to the Authorization Server using the `request_uri`.
 
-4. **Flow Resumption:** Upon granting consent, the Authorization Server redirects the user-agent back to the Client with an Authorization Code. The Client completes the token exchange (including `actor_token` validation) and retries the action at the Resource Server. The Delegated Actor's operation resumes transparently.
+4. **Consent Decision:** The Authorization Server presents the consent screen. The Granting User reviews the requested delegation and either grants or denies consent.
 
-5. **Denial Handling:** If the Granting User denies consent, the Authorization Server redirects back with `error=consent_denied`. The Client MUST communicate the denial to the Delegated Actor so it can gracefully handle the refusal (e.g., abandon the action or attempt a fallback).
+5. **Flow Resumption:** Upon granting consent, the Authorization Server redirects the user-agent back to the Client with an Authorization Code. The Client completes the token exchange (including `actor_token` validation) and retries the action at the Resource Server. The Delegated Actor's operation resumes transparently.
+
+6. **Denial Handling:** If the Granting User denies consent, the Authorization Server redirects back with `error=consent_denied`. The Client MUST communicate the denial to the Delegated Actor so it can gracefully handle the refusal (e.g., abandon the action or attempt a fallback).
 
 # Error Codes
 
-This section consolidates all error codes defined by this specification. Standard OAuth 2.0 error codes ({{RFC6749}}) and CIBA error codes ({{OpenID.CIBA}}) also apply where indicated.
+This section consolidates all error codes defined by this specification. Standard OAuth 2.0 error codes ({{RFC6749}}) also apply where indicated. For additional error codes specific to CIBA, see {{ciba-appendix}}.
 
 ## Initiation and Authorization Endpoint Errors
 
-The following error codes are defined for the authorization, PAR, and CIBA endpoints in addition to those in Section 4.1.2.1 of {{RFC6749}}:
+The following error codes are defined for the authorization and PAR endpoints in addition to those in Section 4.1.2.1 of {{RFC6749}}:
 
 consent_denied:
-: The Granting User explicitly denied consent for the Delegated Actor delegation. Applicable at the authorization endpoint (PAR and Direct modes) and during CIBA token delivery.
+: The Granting User explicitly denied consent for the Delegated Actor delegation.
 
 invalid_actor:
-: The `requested_actor` parameter contains an identifier that the Authorization Server does not recognize or that is not eligible for delegation. Applicable at all three initiation endpoints.
+: The `requested_actor` parameter contains an identifier that the Authorization Server has explicitly blocked by policy, or one that fails a registry check (if the Authorization Server maintains a registry of known Delegated Actor identities).
 
 invalid_actor_token:
-: The `actor_token` provided for upfront validation is invalid, expired, revoked, or its signature cannot be verified. Applicable at PAR and CIBA initiation endpoints.
+: The `actor_token` provided for upfront validation is invalid, expired, revoked, or its signature cannot be verified.
 
 actor_mismatch:
-: The identity in the `actor_token` (its `sub` claim) does not match the `requested_actor` parameter. Applicable at PAR and CIBA initiation endpoints.
-
-invalid_binding_message:
-: The `binding_message` does not accurately reflect the `intent_scope` or requested permissions. Applicable at the CIBA endpoint only.
-
-expired_token:
-: The `auth_req_id` has expired before the Granting User responded. Applicable during CIBA token delivery.
+: The identity in the `actor_token` (its `sub` claim) does not match the `requested_actor` parameter.
 
 ## Token Endpoint Errors
 
@@ -819,51 +662,28 @@ invalid_actor_token:
 
 ## Delegated Actor Authentication
 
-The security of this flow relies heavily on the Authorization Server's ability to securely authenticate the Delegated Actor during the token request using the Actor Token. The method by which Delegated Actors obtain and secure their Actor Tokens is critical and outside the scope of this specification, but MUST be implemented securely. Authorization Servers SHOULD require strong authentication methods for Delegated Actors, such as asymmetric key-based JWT assertion (e.g., `private_key_jwt`) rather than shared secrets.
+The security of this flow relies heavily on the Authorization Server's ability to securely authenticate the Delegated Actor during the token request using the Actor Token. The method by which Delegated Actors obtain and secure their Actor Tokens is critical and outside the scope of the normative sections of this specification, but MUST be implemented securely. See {{actor-token-acquisition}} for detailed recommendations on actor identity models, token acquisition mechanisms, and issuer trust establishment. Authorization Servers SHOULD require strong authentication methods for Delegated Actors, such as asymmetric key-based JWT assertion (e.g., `private_key_jwt`) or mutual TLS rather than shared secrets.
 
 ## PAR Security Benefits
 
-When PAR {{RFC9126}} is used as the initiation mode, the authorization parameters (including `requested_actor`, `actor_token`, `scope`, and `intent_scope`) are transmitted server-to-server over TLS, rather than through the Granting User's user-agent. This provides:
+PAR {{RFC9126}} provides the following security benefits for delegation flows, which is why this specification defines the authorization flow using PAR. The authorization parameters (including `requested_actor`, `actor_token`, and `scope`) are transmitted server-to-server over TLS, rather than through the Granting User's user-agent. This provides:
 
 * **Request Integrity:** Authorization parameters cannot be tampered with by malicious browser extensions, compromised user-agents, or man-in-the-browser attacks.
 * **Upfront Actor Validation:** The Authorization Server validates the `actor_token` before the Granting User is prompted, ensuring invalid or expired actors are rejected early.
 * **Reduced Attack Surface:** The `actor_token` is never exposed in the user-agent's URL bar, history, or referrer headers.
 
-Clients capable of using PAR SHOULD prefer it over Direct Authorization Requests for all delegation flows defined in this specification.
-
-## CIBA Security Considerations
-
-When CIBA {{OpenID.CIBA}} is used as the initiation mode, the security considerations in Section 13 of {{OpenID.CIBA}} apply. In addition, the following delegation-specific considerations apply:
-
-* **Out-of-Band Channel Security:** The out-of-band channel MUST be secured against interception and replay per Section 13.1 of {{OpenID.CIBA}}.
-* **Binding Message Authenticity:** The `binding_message` is the Granting User's primary means of understanding the delegation. Compromise of this message could lead to unauthorized delegation.
-* **Polling Rate Limiting:** In poll mode, the Authorization Server MUST enforce the `interval` parameter per Section 10 of {{OpenID.CIBA}}.
-* **Callback Endpoint Security (Ping and Push):** Callback endpoints MUST be pre-registered, TLS-protected, and authenticated via `client_notification_token` per Sections 11 and 12 of {{OpenID.CIBA}}. In push mode, compromise of the callback would expose delegation tokens.
-* **Push Mode Actor Binding:** In push mode, fresh `actor_token` proof-of-presence cannot be enforced at issuance time. Push mode SHOULD NOT be used for delegation scenarios requiring actor proof-of-presence at token issuance.
-
-## Binding Message Integrity
-
-The `binding_message` in CIBA requests MUST accurately reflect the `intent_scope` and the requested permissions. The Authorization Server MUST reject any CIBA request where a mismatch is detected between the technical scopes and the human-readable `binding_message`, using the error code `invalid_binding_message`. This requirement prevents:
-
-* **Social Engineering via Misleading Messages:** An attacker displaying a benign message (e.g., "Check your account balance") while requesting elevated permissions (e.g., `execute:trades`).
-* **Scope/Intent Drift:** A misconfigured Client inadvertently presenting an outdated or incorrect description of the Delegated Actor's intended actions.
-
-The Authorization Server SHOULD implement automated validation when `intent_scope` is registered with a known description. For unregistered `intent_scope` values, the Authorization Server MAY rely on policy-based heuristics or manual review.
+The Direct Authorization Code Grant mode ({{direct-appendix}}) does not provide these benefits; it is retained only as a baseline for deployments where PAR is not available.
 
 ## Actor Token Continuity
 
-When the `actor_token` is submitted for upfront validation during PAR or CIBA initiation, the Authorization Server binds the validated actor identity to the authorization session.
+When the `actor_token` is submitted for upfront validation during the PAR request, the Authorization Server binds the validated actor identity to the authorization session. The `actor_token` is REQUIRED at the token endpoint for all flows (PAR, Direct, and CIBA). The Authorization Server MUST verify that the `actor_token`'s `sub` claim matches the `requested_actor` value bound to the Authorization Code. This is the authoritative point at which the Delegated Actor's identity is cryptographically verified and bound to the delegation.
 
-**PAR and Direct modes:** At the token endpoint (for authorization code exchange), the Client MUST re-submit the `actor_token`, and the Authorization Server MUST verify that:
-
-1. The re-submitted `actor_token` is still valid (not expired or revoked since the upfront validation).
-2. The `sub` claim in the re-submitted `actor_token` identifies the same Delegated Actor that was bound during the initiation phase.
 
 This two-phase validation ensures that the Delegated Actor remains authorized between the time the Granting User consents and the time the token is actually issued, mitigating time-of-check-to-time-of-use (TOCTOU) attacks.
 
-**CIBA mode:** The `auth_req_id` returned by the CIBA authentication response serves as the secure handle that carries the validated actor binding through the entire transaction lifecycle. Because the Delegated Actor's identity is bound to the `auth_req_id` at initiation time, subsequent token endpoint requests (poll and ping modes) or server-initiated token delivery (push mode) SHOULD NOT require the `actor_token` to be re-submitted. The `auth_req_id` itself provides the continuity guarantee.
+### Flows Without Upfront Validation
 
-If the Authorization Server's policy requires a fresh proof-of-presence at the moment of token issuance (e.g., for high-assurance delegation scenarios), the Authorization Server MUST advertise this requirement and the Client MUST include the `actor_token` in the token request. In push mode, where no Client-initiated token request occurs, fresh proof-of-presence cannot be enforced at issuance time; therefore, push mode SHOULD NOT be used for delegation scenarios requiring token-issuance-time actor proof-of-presence.
+When the authorization request was initiated without an `actor_token` (either in PAR mode without upfront validation, or in Direct mode), the token endpoint validation is the sole point of Delegated Actor authentication. The Authorization Server MUST verify the `actor_token`'s validity and confirm that its `sub` claim matches the `requested_actor` value that the Granting User consented to. This ensures that only the intended Delegated Actor can obtain the delegated access token.
 
 ## Proof Key for Code Exchange (PKCE)
 
@@ -879,7 +699,7 @@ The Authorization Server MUST bind the Authorization Code to the specific Granti
 
 ## Clear and Informed User Consent
 
-The consent screen presented to the Granting User MUST clearly identify the Delegated Actor and the requested scopes to ensure the Granting User understands exactly what authority they are delegating and to whom. When an `intent_scope` is provided, the Authorization Server SHOULD display the intended action in human-readable form. The consent screen SHOULD explicitly indicate that an autonomous entity (not a human) will be exercising the delegated permissions.
+The consent screen presented to the Granting User MUST clearly identify the Delegated Actor and the requested scopes to ensure the Granting User understands exactly what authority they are delegating and to whom. The consent screen SHOULD explicitly indicate that an autonomous entity will be exercising the delegated permissions.
 
 ## Privilege Escalation Prevention
 
@@ -922,9 +742,8 @@ Access Tokens and Actor Tokens MUST be transmitted only over TLS-protected chann
 
 This specification registers the following parameters in the "OAuth Parameters" registry established by {{RFC6749}}:
 
-* `requested_actor` -- Used at the authorization, PAR, and CIBA endpoints to identify the Delegated Actor.
-* `intent_scope` -- Used at the authorization, PAR, and CIBA endpoints to describe the Delegated Actor's intended action.
-* `actor_token` -- Used at the PAR, CIBA, and token endpoints to authenticate the Delegated Actor.
+* `requested_actor` -- Used at the authorization and PAR endpoints to identify the Delegated Actor.
+* `actor_token` -- Used at the PAR and token endpoints to authenticate the Delegated Actor.
 * `actor_token_type` -- Used alongside `actor_token` to identify its type.
 
 ## OAuth Extensions Error Registration
@@ -938,19 +757,15 @@ This specification registers the following error codes in the "OAuth Extensions 
 * `invalid_binding_message`
 * `expired_token`
 
-# Use Case Examples
-
-This section provides two complete examples demonstrating the generality of this specification: one involving an AI-driven personal assistant (PAR flow) and one involving a traditional automated financial rebalancing script (CIBA flow).
-
-## Example 1: AI-Driven Personal Assistant (PAR Flow)
+# Use Case Example: AI-Driven Personal Assistant (PAR Flow)
 
 **Scenario:** A user ("Alice") uses a productivity application ("WorkHub") that integrates with an AI personal assistant ("AssistBot"). Alice asks AssistBot to schedule a meeting with a colleague by checking her calendar and sending an invitation on her behalf.
 
-### Step 1: Delegated Actor Signals Intent
+## Step 1: Delegated Actor Signals Intent
 
 AssistBot (the Delegated Actor, identifier: `assistbot-v2`) signals to WorkHub (the Client) that it needs to read Alice's calendar and create an event.
 
-### Step 2: Client Attempts Action
+## Step 2: Client Attempts Action
 
 WorkHub makes a request to Alice's calendar service (the Resource Server):
 
@@ -960,7 +775,7 @@ Host: calendar.example.com
 Authorization: Bearer <existing_token_without_act_claim>
 ~~~
 
-### Step 3: Resource Server Challenge
+## Step 3: Resource Server Challenge
 
 The calendar service determines the token lacks the required delegation claims and responds:
 
@@ -970,7 +785,7 @@ WWW-Authenticate: Bearer error="invalid_token",
   error_description="Access token missing required delegation claims"
 ~~~
 
-### Step 4: Dynamic Consent via PAR (Human-in-the-Loop)
+## Step 4: Dynamic Consent via PAR (Human-in-the-Loop)
 
 WorkHub submits the authorization parameters to the Authorization Server's PAR endpoint, including AssistBot's Actor Token for upfront validation:
 
@@ -982,8 +797,7 @@ Content-Type: application/x-www-form-urlencoded
 response_type=code&
 client_id=workhub-app&
 redirect_uri=https://workhub.example.com/callback&
-scope=read:calendar write:calendar&
-intent_scope=intent:schedule_meeting_with_colleague&
+scope=read:calendar write:calendar intent:schedule_meeting_with_colleague&
 state=xy9z3k&
 code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&
 code_challenge_method=S256&
@@ -1008,12 +822,11 @@ Cache-Control: no-store
 WorkHub then redirects Alice's browser using the `request_uri`:
 
 ~~~
-GET /authorize?client_id=workhub-app&
-  request_uri=urn:ietf:params:oauth:request_uri:workhub_cal_7f3a HTTP/1.1
+GET /authorize?client_id=workhub-app&request_uri=urn:ietf:params:oauth:request_uri:workhub_cal_7f3a HTTP/1.1
 Host: auth.example.com
 ~~~
 
-### Step 5: Granting User Consent
+## Step 5: Granting User Consent
 
 The Authorization Server displays a consent screen to Alice:
 
@@ -1028,15 +841,14 @@ The Authorization Server displays a consent screen to Alice:
 
 Alice clicks "Allow."
 
-### Step 6: Authorization Code Issued
+## Step 6: Authorization Code Issued
 
 ~~~
 HTTP/1.1 302 Found
-Location: https://workhub.example.com/callback?
-  code=SplxlOBeZQQYbYS6WxSbIA&state=xy9z3k
+Location: https://workhub.example.com/callback?code=SplxlOBeZQQYbYS6WxSbIA&state=xy9z3k
 ~~~
 
-### Step 7: Token Exchange with Actor Authentication
+## Step 7: Token Exchange with Actor Authentication
 
 WorkHub exchanges the code at the token endpoint, including AssistBot's Actor Token. The Authorization Server verifies that this `actor_token` identifies the same Delegated Actor (`assistbot-v2`) that was validated during the PAR request (actor continuity check):
 
@@ -1054,14 +866,14 @@ actor_token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...&
 actor_token_type=urn:ietf:params:oauth:token-type:jwt
 ~~~
 
-### Step 8: Delegated Access Token Issued
+## Step 8: Delegated Access Token Issued
 
 ~~~json
 {
   "access_token": "eyJhbGciOiJSUzI1NiJ9...",
   "token_type": "Bearer",
   "expires_in": 3600,
-  "scope": "read:calendar write:calendar"
+  "scope": "read:calendar write:calendar intent:schedule_meeting_with_colleague"
 }
 ~~~
 
@@ -1073,7 +885,7 @@ Decoded JWT payload of the access token:
   "aud": "https://calendar.example.com",
   "sub": "alice@example.com",
   "azp": "workhub-app",
-  "scope": "read:calendar write:calendar",
+  "scope": "read:calendar write:calendar intent:schedule_meeting_with_colleague",
   "exp": 1746009896,
   "iat": 1746006296,
   "jti": "tok-7f3a-1b2c",
@@ -1083,11 +895,128 @@ Decoded JWT payload of the access token:
 }
 ~~~
 
-### Step 9: Action Completed
+## Step 9: Action Completed
 
 WorkHub retries the calendar request with the new token. The calendar service validates the `act` claim and processes the request. AssistBot successfully schedules the meeting.
 
-## Example 2: Automated Financial Portfolio Rebalancing (CIBA Flow)
+--- back
+
+# Client-Initiated Backchannel Authentication (CIBA) for Ambient Use Cases {#ciba-appendix}
+
+This appendix describes how the delegation parameters and semantics defined in this specification apply to Client-Initiated Backchannel Authentication (CIBA) {{OpenID.CIBA}}. CIBA is appropriate when the Delegated Actor is operating as a background process and the Granting User is NOT currently interacting with the Client (e.g., scheduled batch jobs, background monitoring agents, after-hours automation). The Authorization Server contacts the Granting User through an out-of-band channel (push notification, SMS, authentication app) to obtain consent. See Section 4 of {{OpenID.CIBA}} for the base authentication request specification.
+
+## CIBA Authentication Request
+
+~~~
+POST /bc-authorize HTTP/1.1
+Host: authorization-server.example.com
+Content-Type: application/x-www-form-urlencoded
+Authorization: Basic <client_credentials>
+
+scope=<scope>&
+client_id=<client_id>&
+login_hint=<granting_user_identifier>&
+binding_message=<human_readable_intent_description>&
+requested_actor=<actor_id>&
+actor_token=<actor_token>&
+actor_token_type=urn:ietf:params:oauth:token-type:jwt
+~~~
+
+## CIBA-Specific Parameters
+
+In addition to standard OAuth 2.0 parameters (`scope`, `client_id`) and the delegation-specific parameters introduced by this specification (`requested_actor`, `actor_token`, `actor_token_type`), the CIBA request includes parameters defined in Section 7.1 of {{OpenID.CIBA}}. Of particular note:
+
+login_hint:
+: REQUIRED. Identifies the Granting User per Section 7.1 of {{OpenID.CIBA}}.
+
+binding_message:
+: REQUIRED for this specification. A human-readable string displayed to the Granting User on their authentication device. This message MUST accurately reflect the requested permissions and the Delegated Actor's identity (e.g., `"Allow rebalancer-v1 to execute trades on your portfolio"`).
+
+See Section 7.1 of {{OpenID.CIBA}} for additional standard parameters (`id_token_hint`, `login_hint_token`, `requested_expiry`, `client_notification_token`, etc.).
+
+## Upfront Actor Validation (CIBA)
+
+The upfront actor validation described in the Authorization Request section of the main specification applies equally to CIBA. The Client SHOULD include the `actor_token` and `actor_token_type` parameters in the CIBA authentication request. If provided, the Authorization Server MUST validate the `actor_token` before initiating the out-of-band consent flow with the Granting User. The validated actor identity is bound to the resulting `auth_req_id`.
+
+## Binding Message Integrity
+
+The `binding_message` MUST be semantically consistent with the `scope` parameters or the requested authorization consent. If a mismatch is detected, the Authorization Server MUST reject the request with `invalid_binding_message`. This requirement prevents:
+
+* **Social Engineering via Misleading Messages:** An attacker displaying a benign message (e.g., "Check your account balance") while requesting elevated permissions (e.g., `execute:trades`).
+* **Scope/Intent Drift:** A misconfigured Client inadvertently presenting an outdated or incorrect description of the Delegated Actor's intended actions.
+
+The Authorization Server SHOULD implement automated validation when registered scope descriptions are available. The Authorization Server MAY rely on policy-based heuristics or manual review for unrecognized scope values.
+
+## Authorization Server Processing (CIBA)
+
+Upon receiving the CIBA authentication request, the Authorization Server MUST:
+
+1. Authenticate the Client and validate standard CIBA parameters per Section 7.3 of {{OpenID.CIBA}}.
+2. Validate the `requested_actor` and the `actor_token` per the upfront validation rules.
+3. Validate `binding_message` integrity (see above). If a mismatch is detected, reject with `invalid_binding_message`.
+4. Resolve the `login_hint` to identify the Granting User. If the Granting User cannot be identified, reject with `invalid_request`.
+5. Initiate the out-of-band consent flow, displaying the `binding_message`, Delegated Actor identity, and requested permissions.
+
+## CIBA Authentication Response
+
+If valid, the Authorization Server returns an `auth_req_id` per Section 7.3 of {{OpenID.CIBA}}. The `auth_req_id` binds the validated Delegated Actor identity to the pending transaction.
+
+## CIBA Token Delivery Modes
+
+CIBA defines three token delivery modes -- **poll**, **ping**, and **push** -- as specified in Sections 10, 11, and 12 of {{OpenID.CIBA}} respectively. In all three modes, the `auth_req_id` serves as the secure handle for the pending delegation. Because the Delegated Actor's identity was already validated and bound to the `auth_req_id` during the initial CIBA authentication request, subsequent requests to the token endpoint SHOULD NOT include the `actor_token` unless the Authorization Server requires a fresh proof-of-presence at the moment of token issuance. If fresh proof-of-presence is required, the Authorization Server MUST advertise this via its discovery metadata (e.g., `ciba_actor_token_at_token_endpoint_required: true`).
+
+### Poll Mode
+
+The Client polls the token endpoint per Section 10 of {{OpenID.CIBA}}:
+
+~~~
+POST /token HTTP/1.1
+Host: authorization-server.example.com
+Content-Type: application/x-www-form-urlencoded
+Authorization: Basic <client_credentials>
+
+grant_type=urn:openid:params:grant-type:ciba&
+auth_req_id=1c266114-a1be-4252-8ad1-04986c5b9ac1&
+client_id=<client_id>
+~~~
+
+The Authorization Server returns `authorization_pending` while the Granting User has not responded. The Client MUST respect the `interval` value and MUST NOT poll more frequently. Upon consent, the Authorization Server returns an Access Token with the delegation claims defined in the Access Token Structure and Claims section. If consent is denied, the Authorization Server returns `error=consent_denied`.
+
+### Ping Mode
+
+In ping mode (Section 11 of {{OpenID.CIBA}}), the Authorization Server notifies the Client's pre-registered callback endpoint with the `auth_req_id` when the Granting User responds. The Client then retrieves the token from the token endpoint using the same request format as poll mode. The Client MUST validate the `client_notification_token` on every callback invocation.
+
+### Push Mode
+
+In push mode (Section 12 of {{OpenID.CIBA}}), the Authorization Server delivers the Access Token directly to the Client's callback endpoint upon Granting User consent. No Client-initiated token request occurs. The pushed Access Token MUST contain the same delegation claims (`sub`, `azp`, `act`) as tokens issued through poll or ping modes. Because there is no Client-initiated token request in push mode, there is no opportunity to present an `actor_token` at issuance time; the actor binding relies entirely on the upfront validation during the CIBA authentication request.
+
+## CIBA Actor Token Continuity
+
+The `auth_req_id` returned by the CIBA authentication response serves as the secure handle that carries the validated actor binding through the entire transaction lifecycle. Because the Delegated Actor's identity is bound to the `auth_req_id` at initiation time, subsequent token endpoint requests (poll and ping modes) or server-initiated token delivery (push mode) SHOULD NOT require the `actor_token` to be re-submitted. The `auth_req_id` itself provides the continuity guarantee.
+
+If the Authorization Server's policy requires a fresh proof-of-presence at the moment of token issuance (e.g., for high-assurance delegation scenarios), the Authorization Server MUST advertise this requirement and the Client MUST include the `actor_token` in the token request. In push mode, where no Client-initiated token request occurs, fresh proof-of-presence cannot be enforced at issuance time; therefore, push mode SHOULD NOT be used for delegation scenarios requiring token-issuance-time actor proof-of-presence.
+
+## CIBA Error Codes
+
+The following additional error codes apply when CIBA is used:
+
+invalid_binding_message:
+: The `binding_message` does not accurately reflect the requested permissions. Applicable at the CIBA endpoint only.
+
+expired_token:
+: The `auth_req_id` has expired before the Granting User responded. Applicable during CIBA token delivery.
+
+## CIBA Security Considerations
+
+When CIBA {{OpenID.CIBA}} is used, the security considerations in Section 13 of {{OpenID.CIBA}} apply. In addition, the following delegation-specific considerations apply:
+
+* **Out-of-Band Channel Security:** The out-of-band channel MUST be secured against interception and replay per Section 13.1 of {{OpenID.CIBA}}.
+* **Binding Message Authenticity:** The `binding_message` is the Granting User's primary means of understanding the delegation. Compromise of this message could lead to unauthorized delegation.
+* **Polling Rate Limiting:** In poll mode, the Authorization Server MUST enforce the `interval` parameter per Section 10 of {{OpenID.CIBA}}.
+* **Callback Endpoint Security (Ping and Push):** Callback endpoints MUST be pre-registered, TLS-protected, and authenticated via `client_notification_token` per Sections 11 and 12 of {{OpenID.CIBA}}. In push mode, compromise of the callback would expose delegation tokens.
+* **Push Mode Actor Binding:** In push mode, fresh `actor_token` proof-of-presence cannot be enforced at issuance time. Push mode SHOULD NOT be used for delegation scenarios requiring actor proof-of-presence at token issuance.
+
+## CIBA Example: Automated Financial Portfolio Rebalancing
 
 **Scenario:** An investor ("Bob") uses a brokerage platform ("InvestCo") that offers an automated portfolio rebalancing feature. A server-side script ("rebalancer-conservative-v1") periodically analyzes Bob's portfolio and executes trades to maintain his target allocation. This script is not an AI agent -- it is a traditional deterministic algorithm.
 
@@ -1125,8 +1054,7 @@ POST /bc-authorize HTTP/1.1
 Host: auth.investco.example.com
 Content-Type: application/x-www-form-urlencoded
 
-scope=read:portfolio execute:trades&
-intent_scope=urn:investco:rebalance:conservative&
+scope=read:portfolio execute:trades intent:rebalance:conservative&
 client_id=investco-platform&
 login_hint=bob@example.com&
 binding_message=Allow rebalancer-v1 to rebalance your portfolio (conservative)&
@@ -1177,7 +1105,7 @@ Decoded JWT payload of the access token:
   "aud": "https://brokerage-api.example.com",
   "sub": "bob@example.com",
   "azp": "investco-platform",
-  "scope": "read:portfolio execute:trades",
+  "scope": "read:portfolio execute:trades intent:rebalance:conservative",
   "exp": 1746009896,
   "iat": 1746006296,
   "jti": "tok-fin-9d4e",
@@ -1191,5 +1119,380 @@ Decoded JWT payload of the access token:
 
 InvestCo retries the portfolio request with the new token. The brokerage API validates the `act` claim, confirms that `rebalancer-conservative-v1` is an authorized trading actor, and processes the portfolio read. The rebalancer script analyzes the positions, computes the necessary trades, and submits them through InvestCo using the same delegated token.
 
---- back
+# Direct Authorization Code Grant Mode {#direct-appendix}
 
+This appendix describes how the delegation parameters and semantics defined in this specification apply to the standard OAuth 2.0 Authorization Code Grant {{RFC6749}} when PAR is not available. This mode is retained as a baseline for low-complexity or legacy deployments.
+
+## Differences from PAR Mode
+
+The Direct Authorization Code Grant mode differs from the PAR-based flow in the following ways:
+
+1. **No back-channel parameter submission:** Authorization parameters are transmitted through the Granting User's user-agent via query parameters, rather than submitted server-to-server to the PAR endpoint.
+
+2. **No upfront `actor_token` validation:** The `actor_token` MUST NOT be included in the front-channel authorization request to avoid exposing it in the user-agent. The `actor_token` is only presented at the token endpoint. As with the PAR-based flow, the authorization request proceeds with the `requested_actor` identifier alone, and the Delegated Actor's cryptographic authentication occurs at the token endpoint.
+
+3. **No `request_uri`:** The Client redirects the Granting User directly to the authorization endpoint with all parameters in the query string, rather than using a `request_uri`.
+
+4. **Reduced request integrity:** Because parameters are transmitted through the user-agent, they are susceptible to tampering by browser extensions, malicious scripts, or compromised user-agents.
+
+## Direct Authorization Request
+
+~~~
+GET /authorize?response_type=code&client_id=<client_id>&redirect_uri=<redirect_uri>&scope=<scope>&state=<state>&code_challenge=<code_challenge>&code_challenge_method=S256&requested_actor=<actor_id> HTTP/1.1
+Host: authorization-server.example.com
+~~~
+
+## Request Parameters
+
+All parameters defined in the Request Parameters section of the main specification apply to the direct authorization request, with the following exceptions:
+
+actor_token:
+: MUST NOT be included. The `actor_token` MUST NOT be transmitted through the user-agent to avoid exposure. It is only presented at the token endpoint.
+
+actor_token_type:
+: MUST NOT be included. Only applicable when `actor_token` is present.
+
+## Authorization Server Processing (Direct)
+
+Upon receiving the authorization request, the Authorization Server MUST perform the following steps:
+
+1. Validate the request parameters according to the OAuth 2.0 Authorization Code Grant (Section 4.1.1 of {{RFC6749}}).
+
+2. Record the `requested_actor` value and bind it to the authorization session. The Authorization Server MAY optionally validate the `requested_actor` against a registry of known Delegated Actor identities if one is maintained, and MAY reject the request with the error code `invalid_actor` if the actor has been explicitly blocked by policy. However, pre-registration of actor identities is NOT REQUIRED; the Authorization Server MAY accept any `requested_actor` value, deferring authoritative actor authentication to the token endpoint where the `actor_token` is mandatory.
+
+3. The Authorization Server MUST present a consent screen to the Granting User per the consent screen requirements defined in the Front-Channel Redirect and Consent section of the main specification.
+
+If the request is valid and the Granting User grants consent, the Authorization Server proceeds to issue an Authorization Code. If the Granting User denies consent, the Authorization Server MUST return an error response with the error code `consent_denied`. If the request is invalid, the Authorization Server returns an appropriate error response.
+
+## Authorization Response and Token Exchange
+
+The Authorization Code Response and the Token Request follow the same format as defined in the Authorization Response and Access Token Request and Response sections of the main specification. The Client MUST include the `actor_token` at the token endpoint. The Authorization Server MUST verify that the `actor_token`'s `sub` claim matches the `requested_actor` bound to the Authorization Code. Since no upfront `actor_token` validation occurs in direct mode, this token endpoint validation is the sole point of Delegated Actor authentication.
+
+## Direct Mode Example: Simple Task Automation
+
+**Scenario:** A user ("Carol") uses a lightweight task management application ("TaskLite") that integrates with a simple automation script ("auto-archiver-v1"). Carol asks the script to archive completed tasks from her project board.
+
+### Step 1: Delegated Actor Signals Intent
+
+The automation script (the Delegated Actor, identifier: `auto-archiver-v1`) signals to TaskLite (the Client) that it needs to read Carol's tasks and archive completed ones.
+
+### Step 2: Client Attempts Action
+
+TaskLite makes a request to Carol's project board service (the Resource Server):
+
+~~~
+GET /api/tasks?status=completed HTTP/1.1
+Host: projects.example.com
+Authorization: Bearer <existing_token_without_act_claim>
+~~~
+
+### Step 3: Resource Server Challenge
+
+The project board service determines the token lacks the required delegation claims and responds:
+
+~~~
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer error="invalid_token",
+  error_description="Access token missing required delegation claims"
+~~~
+
+### Step 4: Dynamic Consent via Direct Authorization Request
+
+Because TaskLite is a simple application and the Authorization Server does not support PAR, TaskLite constructs a direct authorization request:
+
+~~~
+GET /authorize?response_type=code&client_id=tasklite-app&redirect_uri=https://tasklite.example.com/callback&scope=read:tasks write:tasks intent:archive_completed&state=abc123&code_challenge=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk&code_challenge_method=S256&requested_actor=auto-archiver-v1 HTTP/1.1
+Host: auth.example.com
+~~~
+
+Note: The `actor_token` is NOT included in this front-channel request.
+
+### Step 5: Granting User Consent
+
+The Authorization Server authenticates Carol and displays a consent screen:
+
+> **TaskLite** is requesting that **auto-archiver-v1** be allowed to act on your behalf:
+>
+> - **Read** your tasks
+> - **Modify** your tasks
+>
+> **Purpose:** Archive completed tasks
+>
+> [Allow]  [Deny]
+
+Carol clicks "Allow."
+
+### Step 6: Authorization Code Issued
+
+~~~
+HTTP/1.1 302 Found
+Location: https://tasklite.example.com/callback?code=Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf&state=abc123
+~~~
+
+### Step 7: Token Exchange with Actor Authentication
+
+TaskLite exchanges the code at the token endpoint, including the `actor_token` for the first time:
+
+~~~
+POST /token HTTP/1.1
+Host: auth.example.com
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&
+client_id=tasklite-app&
+code=Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf&
+code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk&
+redirect_uri=https://tasklite.example.com/callback&
+actor_token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9...&
+actor_token_type=urn:ietf:params:oauth:token-type:jwt
+~~~
+
+### Step 8: Delegated Access Token Issued
+
+~~~json
+{
+  "access_token": "eyJhbGciOiJSUzI1NiJ9...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "read:tasks write:tasks intent:archive_completed"
+}
+~~~
+
+Decoded JWT payload of the access token:
+
+~~~json
+{
+  "iss": "https://auth.example.com",
+  "aud": "https://projects.example.com",
+  "sub": "carol@example.com",
+  "azp": "tasklite-app",
+  "scope": "read:tasks write:tasks intent:archive_completed",
+  "exp": 1746009896,
+  "iat": 1746006296,
+  "jti": "tok-task-a3b4",
+  "act": {
+    "sub": "auto-archiver-v1"
+  }
+}
+~~~
+
+### Step 9: Action Completed
+
+TaskLite retries the request with the new token. The project board service validates the `act` claim and processes the request. The auto-archiver script reads the completed tasks and archives them.
+
+# Consent Scope Prefix Convention {#consent-scope-prefix}
+
+## Overview
+
+This appendix provides a RECOMMENDED convention for encoding the Delegated Actor's intended action or purpose within the standard OAuth 2.0 `scope` parameter, rather than introducing a separate parameter. By using a well-known prefix on scope values, deployments can distinguish resource-permission scopes (e.g., `read:calendar`) from consent-descriptive scopes that convey the purpose of the delegation (e.g., `intent:schedule_meeting`).
+
+This convention is OPTIONAL. Deployments that adopt it gain enhanced consent presentation and downstream policy enforcement without requiring protocol extensions beyond those defined in the normative sections of this specification.
+
+## Prefix Convention
+
+Deployments SHOULD use a registered prefix to distinguish consent scopes from resource-permission scopes. The RECOMMENDED prefix is `intent:`. For example:
+
+* `intent:schedule_meeting` -- Indicates the Delegated Actor intends to schedule a meeting.
+* `intent:rebalance_portfolio:conservative` -- Indicates the Delegated Actor intends to rebalance a portfolio using a conservative strategy.
+* `intent:send_weekly_report` -- Indicates the Delegated Actor intends to compile and send a weekly report.
+
+These prefixed scope values are included alongside standard resource-permission scopes in the `scope` parameter:
+
+~~~
+scope=read:calendar write:calendar intent:schedule_meeting
+~~~
+
+Deployments MAY define their own prefix (e.g., `action:`, `purpose:`, or a URN-based prefix such as `urn:example:intent:`) provided the prefix is consistently recognized by the Authorization Server and Resource Servers within the deployment.
+
+## Authorization Server Behavior
+
+When the Authorization Server receives a scope value with a recognized consent-scope prefix, it SHOULD:
+
+1. **Parse and separate** the prefixed consent scopes from the resource-permission scopes.
+
+2. **Resolve** each consent scope to a human-readable description, if a registered description is available (e.g., `intent:schedule_meeting` resolves to "Schedule a meeting on your behalf").
+
+3. **Present** the resolved description on the consent screen in addition to the resource-permission scopes. This gives the Granting User a clear understanding of both *what the Delegated Actor intends to do* and *which resource permissions are required to do it*.
+
+4. **Record** the granted consent scopes (both resource-permission and consent-descriptive) in the issued Access Token's `scope` claim, so the full intent is available for downstream validation.
+
+If the Authorization Server does not recognize a prefixed scope value, it SHOULD treat it as an opaque scope value per standard OAuth 2.0 behavior.
+
+## Resource Server Behavior
+
+Resource Servers receiving an Access Token that contains consent-scope prefixed values SHOULD:
+
+1. **Validate** the resource-permission scopes as usual to determine whether the bearer has sufficient permissions for the requested operation.
+
+2. **Inspect** any consent-scope values (e.g., those matching the `intent:` prefix) to verify that the action being performed is consistent with the stated intent. For example, if the token contains `intent:schedule_meeting` but the request is to delete a calendar, the Resource Server SHOULD reject the request even if `write:calendar` is present.
+
+3. **Log** the consent-scope values alongside the `act` claim for audit purposes, providing a record of what the Delegated Actor was authorized to do and what it actually attempted.
+
+This approach enables Resource Servers to enforce intent-based policies without requiring a separate protocol parameter or token claim.
+
+## Example
+
+A Client requesting delegation for an AI assistant to schedule a meeting submits the following PAR request:
+
+~~~
+POST /par HTTP/1.1
+Host: authorization-server.example.com
+Content-Type: application/x-www-form-urlencoded
+
+response_type=code&
+client_id=workhub-app&
+redirect_uri=https://workhub.example.com/callback&
+scope=read:calendar write:calendar intent:schedule_meeting&
+code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&
+code_challenge_method=S256&
+requested_actor=assistbot-v2&
+actor_token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...&
+actor_token_type=urn:ietf:params:oauth:token-type:jwt
+~~~
+
+The Authorization Server parses the `scope` parameter and identifies:
+
+* Resource-permission scopes: `read:calendar`, `write:calendar`
+* Consent scope: `intent:schedule_meeting` resolves to "Schedule a meeting on your behalf"
+
+The consent screen presented to the Granting User displays:
+
+~~~
+WorkHub is requesting that AssistBot (assistbot-v2) act on your behalf:
+
+  Purpose: Schedule a meeting on your behalf
+  Permissions: Read your calendar, Write to your calendar
+
+  [Allow]  [Deny]
+~~~
+
+The resulting Access Token includes all granted scopes:
+
+~~~json
+{
+  "iss": "https://authorization-server.example.com",
+  "sub": "alice",
+  "azp": "workhub-app",
+  "scope": "read:calendar write:calendar intent:schedule_meeting",
+  "act": {
+    "sub": "assistbot-v2"
+  }
+}
+~~~
+
+The Resource Server (calendar API) validates that:
+
+1. `read:calendar` and `write:calendar` are present (sufficient permissions).
+2. `intent:schedule_meeting` is consistent with the calendar write operation being attempted.
+3. The `act.sub` identifies a recognized Delegated Actor.
+
+# Actor Representation and Actor Token Acquisition {#actor-token-acquisition}
+
+This appendix provides RECOMMENDED guidance on how a Delegated Actor establishes its identity and obtains an Actor Token for use in the delegation flows defined by this specification. The normative sections of this specification treat the Actor Token as an opaque input: a JWT {{RFC7519}} whose `sub` claim identifies the Delegated Actor. This appendix describes the ecosystem of identity models and token acquisition mechanisms that produce such tokens.
+
+## Actor Identity Models
+
+A Delegated Actor MUST possess a stable, unique identity that can be represented as the `sub` claim in a JWT. The following identity models are RECOMMENDED but not limited to:
+
+### OAuth 2.0 Client Identity
+
+The Delegated Actor is registered as an OAuth 2.0 client with its own `client_id` and credentials at an identity provider. This is the most straightforward model: the actor authenticates using the OAuth 2.0 Client Credentials Grant (Section 4.4 of {{RFC6749}}) or Mutual TLS Client Authentication ({{?RFC8705}}) to obtain a JWT that serves as its Actor Token.
+
+This model is suitable for:
+
+* AI agents or automation services that are deployed as standalone applications with their own client registrations.
+* Background services and batch-processing scripts that operate under a fixed application identity.
+
+### Service Account Identity
+
+The Delegated Actor operates under a service account -- a non-human account provisioned in an identity provider's user directory or service registry. The service account has its own credentials (e.g., a client secret, a certificate, or a key pair) and authenticates to the identity provider to obtain a JWT with a `sub` claim corresponding to the service account identifier.
+
+This model is suitable for:
+
+* Robotic process automation (RPA) bots that are provisioned as named service accounts within an organization's identity infrastructure.
+* IT support technicians or human operators modeled as service accounts when acting in a delegated capacity (see the human-actor discussion in the Introduction).
+* Internal microservices that need to act on behalf of users and are identified by service account names.
+
+### Workload Identity
+
+The Delegated Actor is identified by a workload identity -- a platform-assigned identity bound to a specific compute workload (e.g., a Kubernetes pod, a cloud function, a virtual machine instance, or a container). The workload obtains its identity token from the platform's identity service (e.g., a cloud provider's instance metadata service or a service mesh identity issuer) without requiring static credentials to be provisioned or rotated by an administrator.
+
+This model is suitable for:
+
+* Cloud-native AI agents and automation services running in managed environments where the platform attests to the workload's identity.
+* Ephemeral or auto-scaled services where static client credentials are impractical to manage.
+* Zero-trust architectures where identity is bound to the runtime environment rather than to a pre-provisioned secret.
+
+## Obtaining the Actor Token
+
+Regardless of the identity model, the Delegated Actor MUST obtain a JWT to use as its Actor Token. The following mechanisms are RECOMMENDED:
+
+### Client Credentials Grant
+
+The Delegated Actor authenticates to the token endpoint of its identity provider using the OAuth 2.0 Client Credentials Grant (Section 4.4 of {{RFC6749}}). The identity provider issues a JWT access token (or a dedicated identity assertion) whose `sub` claim identifies the Delegated Actor.
+
+~~~
+POST /token HTTP/1.1
+Host: actor-idp.example.com
+Content-Type: application/x-www-form-urlencoded
+Authorization: Basic <actor_client_credentials>
+
+grant_type=client_credentials&
+scope=urn:ietf:params:oauth:actor-token
+~~~
+
+The resulting JWT serves as the Actor Token:
+
+~~~json
+{
+  "iss": "https://actor-idp.example.com",
+  "sub": "assistbot-v2",
+  "aud": "https://authorization-server.example.com",
+  "exp": 1746009896,
+  "iat": 1746006296,
+  "jti": "actor-tok-9f3a"
+}
+~~~
+
+### Mutual TLS (mTLS) Client Authentication
+
+The Delegated Actor authenticates using a client certificate bound to its identity, per {{?RFC8705}}. The identity provider validates the certificate chain and issues a JWT whose `sub` claim is derived from the certificate's subject or Subject Alternative Name (SAN). This approach eliminates shared secrets and provides strong cryptographic proof of the actor's identity.
+
+### JWT Assertion (private_key_jwt)
+
+The Delegated Actor creates and signs a JWT assertion using its private key, per Section 2.2 of {{?RFC7523}}, and presents it to the identity provider's token endpoint. The identity provider validates the assertion's signature against the actor's pre-registered public key and issues an Actor Token in response. This mechanism is RECOMMENDED for Delegated Actors that manage their own key pairs.
+
+### Platform-Issued Workload Tokens
+
+In cloud and container-orchestrated environments, the Delegated Actor obtains an identity token directly from the platform's identity service (e.g., a cloud provider's instance metadata endpoint, a Kubernetes service account token projection, or a service mesh identity issuer such as SPIFFE). The platform-issued token is a JWT attesting to the workload's identity. The Delegated Actor MAY use this token directly as its Actor Token if the Authorization Server trusts the platform issuer, or MAY exchange it for an Actor Token via a token exchange ({{RFC8693}}) with a trusted identity provider.
+
+## Actor Token Issuer Trust
+
+The Actor Token presented in the delegation flow is validated by the Authorization Server. The issuer of the Actor Token -- the identity provider that authenticated the Delegated Actor -- MAY or MAY NOT be the same entity as the Authorization Server that authenticates the Granting User.
+
+### Same-Issuer Model
+
+When the Actor Token issuer is the same Authorization Server that processes the delegation flow, trust is implicit. The Authorization Server validates the Actor Token using its own signing keys and token policies. This is the simplest deployment model and is RECOMMENDED when all parties (Granting Users, Clients, and Delegated Actors) are managed within a single identity domain.
+
+### Cross-Issuer Model
+
+When the Actor Token is issued by a different identity provider than the Authorization Server, the Authorization Server MUST establish trust in the external issuer. The following mechanisms are RECOMMENDED:
+
+Pre-Configured Trust:
+: The Authorization Server is configured with a list of trusted Actor Token issuers, including each issuer's identifier (`iss` value) and its public key material or JWKS endpoint URI. The Authorization Server validates Actor Tokens from these issuers by fetching their signing keys (e.g., via the issuer's `jwks_uri` from its OpenID Connect Discovery metadata document) and verifying the token's signature, issuer, and audience claims. This is the RECOMMENDED approach for stable, known partnerships between organizations.
+
+Dynamic Issuer Verification:
+: The Authorization Server dynamically resolves an unknown Actor Token issuer by retrieving the issuer's OpenID Connect Discovery metadata (`.well-known/openid-configuration`) from the `iss` claim in the Actor Token. The Authorization Server fetches the issuer's JWKS and validates the token's signature. To prevent abuse, the Authorization Server MUST maintain an allowlist of permitted issuer domains or apply rigorous validation policies (e.g., requiring the issuer to be within a specific domain suffix, validating the issuer's TLS certificate chain, or requiring prior administrative approval before accepting tokens from a newly discovered issuer). Dynamic verification without any form of allowlist or domain restriction is NOT RECOMMENDED due to the risk of accepting tokens from attacker-controlled issuers.
+
+Federation Protocols:
+: In federated environments, the Authorization Server MAY rely on an established federation framework (e.g., OpenID Federation) to dynamically discover and validate trust relationships with external Actor Token issuers. The federation trust chain provides the cryptographic assurance that the issuer is a legitimate participant in the federation.
+
+### Recommendations
+
+1. The Authorization Server MUST validate the Actor Token's signature, `iss`, `sub`, `aud` (if present), and `exp` claims regardless of whether the issuer is the same or different entity.
+
+2. When the Actor Token issuer is external, the Authorization Server SHOULD require that the Actor Token's `aud` claim includes the Authorization Server's identifier, to prevent token replay across unrelated Authorization Servers.
+
+3. The Authorization Server SHOULD cache issuer metadata and JWKS responses according to their HTTP cache headers to avoid excessive network calls during token validation.
+
+4. Deployments SHOULD document which Actor Token issuers are trusted and the mechanism by which trust is established (pre-configured, dynamic, or federated) in the Authorization Server's operational documentation.
